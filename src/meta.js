@@ -9,8 +9,12 @@
 // @description  download sheet music from musescore.com for free, no login or Musescore Pro required | 免登录、免 Musescore Pro，免费下载 musescore.com 上的曲谱
 // @author       Xmader
 // @match        https://musescore.com/*/*
+// @match        https://s.musescore.com/*/*
 // @license      MIT
-// @copyright    Copyright (c) 2019-2020 Xmader
-// @grant        none
+// @copyright    Copyright (c) 2019-2021 Xmader
+// @grant        unsafeWindow
+// @grant        GM.registerMenuCommand
+// @grant        GM.addElement
+// @grant        GM.openInTab
 // @run-at       document-start
 // ==/UserScript==

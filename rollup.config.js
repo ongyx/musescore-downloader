@@ -15,7 +15,12 @@ const getBannerText = () => {
     return bannerText
 }
 
-const plugins = [
+const getWrapper = (startL, endL) => {
+    const js = fs.readFileSync("./src/wrapper.js", "utf-8")
+    return js.split(/\n/g).slice(startL, endL).join("\n")
+}
+
+const basePlugins = [
     typescript({
         target: "ES6",
         sourceMap: false,
@@ -37,12 +42,6 @@ const plugins = [
     string({
         include: "**/*.css",
     }),
-    builtins(),
-    nodeGlobals({
-        dirname: false,
-        filename: false,
-        baseDir: false,
-    }),
     {
         /**
          * remove tslib license comments
@@ -58,6 +57,16 @@ const plugins = [
             }
         }
     },
+]
+
+const plugins = [
+    ...basePlugins,
+    builtins(),
+    nodeGlobals({
+        dirname: false,
+        filename: false,
+        baseDir: false,
+    }),
 ]
 
 export default [
@@ -79,9 +88,19 @@ export default [
             format: "iife",
             sourcemap: false,
             banner: getBannerText,
-            intro: "// fix for Greasemonkey\nwindow.eval('(' + function () {",
-            outro: "}.toString() + ')()')"
+            intro: () => getWrapper(0, -1),
+            outro: () => getWrapper(-1)
         },
         plugins,
+    },
+    {
+        input: "src/cli.ts",
+        output: {
+            file: "dist/cli.js",
+            format: "cjs",
+            banner: "#!/usr/bin/env node",
+            sourcemap: false,
+        },
+        plugins: basePlugins,
     },
 ]

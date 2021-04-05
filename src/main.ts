@@ -1,17 +1,25 @@
 import './meta'
 
-import { waitForDocumentLoaded, saveAs } from './utils'
+import FileSaver from 'file-saver'
+import { waitForSheetLoaded, console } from './utils'
 import { downloadPDF } from './pdf'
 import { downloadMscz } from './mscz'
 import { getFileUrl } from './file'
-import { WebMscore, loadSoundFont } from './mscore'
-import { BtnList, BtnAction, BtnListMode } from './btn'
-import scoreinfo from './scoreinfo'
+import { INDV_DOWNLOADS } from './mscore'
+import { getLibreScoreLink } from './librescore-link'
+import { BtnList, BtnAction, BtnListMode, ICON } from './btn'
+import { ScoreInfoInPage, SheetInfoInPage, getActualId } from './scoreinfo'
 import i18n from './i18n'
+
+const { saveAs } = FileSaver
 
 const main = (): void => {
   const btnList = new BtnList()
-  const filename = scoreinfo.fileName
+  const scoreinfo = new ScoreInfoInPage(document)
+  const { fileName } = scoreinfo
+
+  // eslint-disable-next-line no-void
+  void getActualId(scoreinfo)
 
   let indvPartBtn: HTMLButtonElement | null = null
   const fallback = () => {
@@ -21,38 +29,38 @@ const main = (): void => {
 
   btnList.add({
     name: i18n('DOWNLOAD')('MSCZ'),
-    action: BtnAction.process(downloadMscz),
+    action: BtnAction.process(() => downloadMscz(scoreinfo, saveAs)),
   })
 
   btnList.add({
     name: i18n('DOWNLOAD')('PDF'),
-    action: BtnAction.process(downloadPDF, fallback, 3 * 60 * 1000 /* 3min */),
+    action: BtnAction.process(() => downloadPDF(scoreinfo, new SheetInfoInPage(document)), fallback, 3 * 60 * 1000 /* 3min */),
   })
 
   btnList.add({
     name: i18n('DOWNLOAD')('MusicXML'),
-    action: BtnAction.mscoreWindow(async (w, score) => {
+    action: BtnAction.mscoreWindow(scoreinfo, async (w, score) => {
       const mxl = await score.saveMxl()
       const data = new Blob([mxl])
-      saveAs(data, `${filename}.mxl`)
+      saveAs(data, `${fileName}.mxl`)
       w.close()
     }),
   })
 
   btnList.add({
     name: i18n('DOWNLOAD')('MIDI'),
-    action: BtnAction.download(() => getFileUrl('midi'), fallback, 30 * 1000 /* 30s */),
+    action: BtnAction.download(() => getFileUrl(scoreinfo.id, 'midi'), fallback, 30 * 1000 /* 30s */),
   })
 
   btnList.add({
     name: i18n('DOWNLOAD')('MP3'),
-    action: BtnAction.download(() => getFileUrl('mp3'), fallback, 30 * 1000 /* 30s */),
+    action: BtnAction.download(() => getFileUrl(scoreinfo.id, 'mp3'), fallback, 30 * 1000 /* 30s */),
   })
 
   indvPartBtn = btnList.add({
     name: i18n('IND_PARTS')(),
     tooltip: i18n('IND_PARTS_TOOLTIP')(),
-    action: BtnAction.mscoreWindow(async (w, score, txt) => {
+    action: BtnAction.mscoreWindow(scoreinfo, async (w, score, txt) => {
       const metadata = await score.metadata()
       console.log('score metadata loaded by webmscore', metadata)
 
@@ -64,44 +72,7 @@ const main = (): void => {
       const fieldset = w.document.createElement('fieldset')
       w.document.body.append(fieldset)
 
-      interface IndividualDownload {
-        name: string;
-        fileExt: string;
-        action (score: WebMscore): Promise<Uint8Array>;
-      }
-
-      const downloads: IndividualDownload[] = [
-        {
-          name: i18n('DOWNLOAD')('PDF'),
-          fileExt: 'pdf',
-          action: (score) => score.savePdf(),
-        },
-        {
-          name: i18n('DOWNLOAD')('MSCZ'),
-          fileExt: 'mscz',
-          action: (score) => score.saveMsc('mscz'),
-        },
-        {
-          name: i18n('DOWNLOAD')('MusicXML'),
-          fileExt: 'mxl',
-          action: (score) => score.saveMxl(),
-        },
-        {
-          name: i18n('DOWNLOAD')('MIDI'),
-          fileExt: 'mid',
-          action: (score) => score.saveMidi(true, true),
-        },
-        {
-          name: i18n('DOWNLOAD_AUDIO')('FLAC'),
-          fileExt: 'flac',
-          action: (score) => loadSoundFont(score).then(() => score.saveAudio('flac')),
-        },
-        {
-          name: i18n('DOWNLOAD_AUDIO')('OGG'),
-          fileExt: 'ogg',
-          action: (score) => loadSoundFont(score).then(() => score.saveAudio('ogg')),
-        },
-      ]
+      const downloads = INDV_DOWNLOADS
 
       // part selection
       const DEFAULT_PART = -1 // initially select "full score"
@@ -150,7 +121,7 @@ const main = (): void => {
           const partName = checked.alt
 
           const data = new Blob([await d.action(score)])
-          saveAs(data, `${filename} - ${partName}.${d.fileExt}`)
+          saveAs(data, `${fileName} - ${partName}.${d.fileExt}`)
 
           // unlock button
           initBtn()
@@ -161,8 +132,15 @@ const main = (): void => {
     }),
   })
 
+  btnList.add({
+    name: i18n('VIEW_IN_LIBRESCORE')(),
+    action: BtnAction.openUrl(() => getLibreScoreLink(scoreinfo)),
+    tooltip: 'BETA',
+    icon: ICON.LIBRESCORE,
+  })
+
   btnList.commit(BtnListMode.InPage)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
-waitForDocumentLoaded().then(main)
+waitForSheetLoaded().then(main)

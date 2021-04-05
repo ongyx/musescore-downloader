@@ -1,6 +1,10 @@
 
+import isNodeJs from 'detect-node'
+
 import en from './en'
 import es from './es'
+import it from './it'
+import zh from './zh'
 
 export interface LOCALE {
   'PROCESSING' (): string;
@@ -14,25 +18,31 @@ export interface LOCALE {
   'IND_PARTS' (): string;
   'IND_PARTS_TOOLTIP' (): string;
 
-  'FULL_SCORE' (): string;
-}
+  'VIEW_IN_LIBRESCORE' (): string;
 
-/**
- * type checking only so no missing keys
- */
-export function createLocale<OBJ extends LOCALE> (obj: OBJ): OBJ {
-  return Object.freeze(obj)
+  'FULL_SCORE' (): string;
 }
 
 const locales = (<L extends { [n: string]: LOCALE } /** type checking */> (l: L) => Object.freeze(l))({
   en,
   es,
+  it,
+  zh,
 })
 
 // detect browser language
 const lang = (() => {
+  let userLangs: readonly string[]
+  if (!isNodeJs) {
+    userLangs = navigator.languages
+  } else {
+    const env = process.env
+    const l = env.LC_ALL || env.LC_MESSAGES || env.LANG || env.LANGUAGE || ''
+    userLangs = [l.slice(0, 2)]
+  }
+
   const names = Object.keys(locales)
-  const _lang = navigator.languages.find(l => {
+  const _lang = userLangs.find(l => {
     // find the first occurrence of valid languages
     return names.includes(l)
   })

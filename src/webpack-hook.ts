@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 
 import { hookNative } from './anti-detection'
+import { console, getUnsafeWindow } from './utils'
 
 const CHUNK_PUSH_FN = /^function [^r]\(\w\){/
 
@@ -9,7 +10,7 @@ interface Module {
   (module, exports, __webpack_require__): void;
 }
 
-type WebpackJson = [number[], { [id: string]: Module }][]
+type WebpackJson = [(number | string)[], { [id: string]: Module }, any[]?][]
 
 const moduleLookup = (id: string, globalWebpackJson: WebpackJson) => {
   const pack = globalWebpackJson.find(x => x[1][id])!
@@ -53,8 +54,11 @@ export const webpackHook = (moduleId: string, moduleOverrides: { [id: string]: M
 
 export const ALL = '*'
 
-export const webpackGlobalOverride = (() => {
+export const [webpackGlobalOverride, onPackLoad] = (() => {
+  type OnPackLoadFn = (pack: WebpackJson[0]) => any
+
   const moduleOverrides: { [id: string]: Module } = {}
+  const onPackLoadFns: OnPackLoadFn[] = []
 
   function applyOverride (pack: WebpackJson[0]) {
     let entries = Object.entries(moduleOverrides)
@@ -82,9 +86,10 @@ export const webpackGlobalOverride = (() => {
   }
 
   // hook `webpackJsonpmusescore.push` as soon as `webpackJsonpmusescore` is available
-  let jsonp = window['webpackJsonpmusescore']
+  const _w = getUnsafeWindow()
+  let jsonp = _w['webpackJsonpmusescore']
   let hooked = false
-  Object.defineProperty(window, 'webpackJsonpmusescore', {
+  Object.defineProperty(_w, 'webpackJsonpmusescore', {
     get () { return jsonp },
     set (v: WebpackJson) {
       jsonp = v
@@ -92,6 +97,7 @@ export const webpackGlobalOverride = (() => {
         hooked = true
         hookNative(v, 'push', (_fn) => {
           return function (pack) {
+            onPackLoadFns.forEach(fn => fn(pack))
             applyOverride(pack)
             return _fn.call(this, pack)
           }
@@ -100,10 +106,68 @@ export const webpackGlobalOverride = (() => {
     },
   })
 
-  // set overrides
-  return (moduleId: string, override: Module) => {
-    moduleOverrides[moduleId] = override
-  }
+  return [
+    // set overrides
+    (moduleId: string, override: Module) => {
+      moduleOverrides[moduleId] = override
+    },
+    // set onPackLoad listeners
+    (fn: OnPackLoadFn) => {
+      onPackLoadFns.push(fn)
+    },
+  ] as const
 })()
+
+export const webpackContext = new Promise<any>((resolve) => {
+  webpackGlobalOverride(ALL, (n, r, t) => {
+    resolve(t)
+  })
+})
+
+const PACK_ID_REG = /\+(\{.*?"\})\[\w\]\+/
+
+export const loadAllPacks = () => {
+  return webpackContext.then((ctx) => {
+    try {
+      const fn = ctx.e.toString()
+      const packsData = fn.match(PACK_ID_REG)[1] as string
+      // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval
+      const packs = Function(`return (${packsData})`)() as { [id: string]: string }
+
+      Object.keys(packs).forEach((id) => {
+        ctx.e(id)
+      })
+    } catch (err) {
+      console.error(err)
+    }
+  })
+}
+
+const OBF_FN_REG = /\w\(".{4}"\),(\w)=(\[".+?\]);\w=\1,\w=(\d+).+?\);var (\w=.+?,\w\})/
+export const OBFUSCATED_REG = /(\w)\((\d+),"(.{4})"\)/g
+
+export const getObfuscationCtx = (mod: Module): (n: number, s: string) => string => {
+  const str = mod.toString()
+  const m = str.match(OBF_FN_REG)
+  if (!m) return () => ''
+
+  try {
+    const arrVar = m[1]
+    const arr = JSON.parse(m[2])
+
+    let n = +m[3] + 1
+    for (; --n;) arr.push(arr.shift())
+
+    const fnStr = m[4]
+    const ctxStr = `var ${arrVar}=${JSON.stringify(arr)};return (${fnStr})`
+    // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval
+    const fn = new Function(ctxStr)()
+
+    return fn
+  } catch (err) {
+    console.error(err)
+    return () => ''
+  }
+}
 
 export default webpackHook

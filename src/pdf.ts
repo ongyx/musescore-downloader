@@ -1,14 +1,14 @@
 
 import { PDFWorkerHelper } from './worker-helper'
 import { getFileUrl } from './file'
-import { saveAs } from './utils'
-import scoreinfo from './scoreinfo'
+import FileSaver from 'file-saver'
+import { ScoreInfo, SheetInfo } from './scoreinfo'
 
 let pdfBlob: Blob
 
 const _downloadPDF = async (imgURLs: string[], imgType: 'svg' | 'png', name = ''): Promise<void> => {
   if (pdfBlob) {
-    return saveAs(pdfBlob, `${name}.pdf`)
+    return FileSaver.saveAs(pdfBlob, `${name}.pdf`)
   }
 
   const cachedImg = document.querySelector('img[src*=score_]') as HTMLImageElement
@@ -20,18 +20,18 @@ const _downloadPDF = async (imgURLs: string[], imgType: 'svg' | 'png', name = ''
 
   pdfBlob = new Blob([pdfArrayBuffer])
 
-  saveAs(pdfBlob, `${name}.pdf`)
+  FileSaver.saveAs(pdfBlob, `${name}.pdf`)
 }
 
-export const downloadPDF = async (): Promise<void> => {
-  const imgType = scoreinfo.sheetImgType
-  const pageCount = scoreinfo.pageCount
+export const downloadPDF = async (scoreinfo: ScoreInfo, sheet: SheetInfo): Promise<void> => {
+  const imgType = sheet.imgType
+  const pageCount = sheet.pageCount
 
   const rs = Array.from({ length: pageCount }).map((_, i) => {
     if (i === 0) { // The url to the first page is static. We don't need to use API to obtain it.
-      return scoreinfo.baseUrl + `score_${i}.${imgType}`
+      return sheet.thumbnailUrl
     } else { // obtain image urls using the API
-      return getFileUrl('img', i)
+      return getFileUrl(scoreinfo.id, 'img', i)
     }
   })
   const sheetImgURLs = await Promise.all(rs)

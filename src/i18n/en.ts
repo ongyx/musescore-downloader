@@ -1,5 +1,5 @@
 
-import { createLocale } from './'
+import { createLocale } from './utils'
 
 export default createLocale({
   'PROCESSING' () {
@@ -25,6 +25,10 @@ export default createLocale({
   },
   'IND_PARTS_TOOLTIP' () {
     return 'Download individual parts (BETA)' as const
+  },
+
+  'VIEW_IN_LIBRESCORE' () {
+    return 'View in LibreScore' as const
   },
 
   'FULL_SCORE' () {
